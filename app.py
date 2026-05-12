@@ -8,7 +8,7 @@ from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
 
-# Set page config
+# Set page config FIRST
 st.set_page_config(
     page_title="Pinokio Presenter",
     page_icon="🎬",
@@ -52,66 +52,77 @@ mode = st.sidebar.radio("Select Mode", ["Create Presentation", "View Presentatio
 
 def save_presentation_data(name, slides):
     """Save presentation data to JSON"""
-    filepath = DATA_DIR / f"{name}.json"
-    with open(filepath, 'w') as f:
-        json.dump({
-            "name": name,
-            "created": datetime.now().isoformat(),
-            "slides": slides
-        }, f, indent=2)
-    return filepath
+    try:
+        filepath = DATA_DIR / f"{name}.json"
+        with open(filepath, 'w') as f:
+            json.dump({
+                "name": name,
+                "created": datetime.now().isoformat(),
+                "slides": slides
+            }, f, indent=2)
+        return filepath
+    except Exception as e:
+        st.error(f"Error saving presentation: {e}")
+        return None
 
 def load_presentation_data(name):
     """Load presentation data from JSON"""
-    filepath = DATA_DIR / f"{name}.json"
-    if filepath.exists():
-        with open(filepath, 'r') as f:
-            return json.load(f)
+    try:
+        filepath = DATA_DIR / f"{name}.json"
+        if filepath.exists():
+            with open(filepath, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        st.error(f"Error loading presentation: {e}")
     return None
 
 def export_to_pptx(presentation_data):
     """Export presentation to PowerPoint format"""
-    prs = Presentation()
-    prs.slide_width = Inches(10)
-    prs.slide_height = Inches(7.5)
-    
-    for slide_data in presentation_data["slides"]:
-        # Add blank slide
-        blank_slide_layout = prs.slide_layouts[6]
-        slide = prs.slides.add_slide(blank_slide_layout)
+    try:
+        prs = Presentation()
+        prs.slide_width = Inches(10)
+        prs.slide_height = Inches(7.5)
         
-        # Add background color
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = RGBColor(255, 255, 255)
+        for slide_data in presentation_data["slides"]:
+            # Add blank slide
+            blank_slide_layout = prs.slide_layouts[6]
+            slide = prs.slides.add_slide(blank_slide_layout)
+            
+            # Add background color
+            background = slide.background
+            fill = background.fill
+            fill.solid()
+            fill.fore_color.rgb = RGBColor(255, 255, 255)
+            
+            # Add title
+            if slide_data.get("title"):
+                left = Inches(0.5)
+                top = Inches(0.5)
+                width = Inches(9)
+                height = Inches(1)
+                title_box = slide.shapes.add_textbox(left, top, width, height)
+                title_frame = title_box.text_frame
+                title_frame.text = slide_data["title"]
+                title_frame.paragraphs[0].font.size = Pt(54)
+                title_frame.paragraphs[0].font.bold = True
+                title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 107, 107)
+            
+            # Add content
+            if slide_data.get("content"):
+                left = Inches(0.5)
+                top = Inches(2)
+                width = Inches(9)
+                height = Inches(5)
+                content_box = slide.shapes.add_textbox(left, top, width, height)
+                content_frame = content_box.text_frame
+                content_frame.word_wrap = True
+                content_frame.text = slide_data["content"]
+                content_frame.paragraphs[0].font.size = Pt(24)
         
-        # Add title
-        if slide_data.get("title"):
-            left = Inches(0.5)
-            top = Inches(0.5)
-            width = Inches(9)
-            height = Inches(1)
-            title_box = slide.shapes.add_textbox(left, top, width, height)
-            title_frame = title_box.text_frame
-            title_frame.text = slide_data["title"]
-            title_frame.paragraphs[0].font.size = Pt(54)
-            title_frame.paragraphs[0].font.bold = True
-            title_frame.paragraphs[0].font.color.rgb = RGBColor(255, 107, 107)
-        
-        # Add content
-        if slide_data.get("content"):
-            left = Inches(0.5)
-            top = Inches(2)
-            width = Inches(9)
-            height = Inches(5)
-            content_box = slide.shapes.add_textbox(left, top, width, height)
-            content_frame = content_box.text_frame
-            content_frame.word_wrap = True
-            content_frame.text = slide_data["content"]
-            content_frame.paragraphs[0].font.size = Pt(24)
-    
-    return prs
+        return prs
+    except Exception as e:
+        st.error(f"Error exporting to PowerPoint: {e}")
+        return None
 
 # CREATE PRESENTATION MODE
 if mode == "Create Presentation":
@@ -176,8 +187,9 @@ if mode == "Create Presentation":
         with col1:
             if st.button("💾 Save Presentation", use_container_width=True):
                 if presentation_name.strip():
-                    save_presentation_data(presentation_name, slides)
-                    st.success(f"✅ Presentation '{presentation_name}' saved successfully!")
+                    result = save_presentation_data(presentation_name, slides)
+                    if result:
+                        st.success(f"✅ Presentation '{presentation_name}' saved successfully!")
                 else:
                     st.error("Please enter a presentation name")
         
@@ -189,9 +201,10 @@ if mode == "Create Presentation":
             if st.button("📥 Export to PowerPoint", use_container_width=True):
                 if presentation_name.strip():
                     prs = export_to_pptx({"slides": slides})
-                    output_path = DATA_DIR / f"{presentation_name}.pptx"
-                    prs.save(str(output_path))
-                    st.success(f"✅ Exported to {output_path}")
+                    if prs:
+                        output_path = DATA_DIR / f"{presentation_name}.pptx"
+                        prs.save(str(output_path))
+                        st.success(f"✅ Exported to {output_path}")
                 else:
                     st.error("Please enter a presentation name")
 
@@ -203,9 +216,10 @@ elif mode == "View Presentations":
     json_files = list(DATA_DIR.glob("*.json"))
     
     if json_files:
+        presentation_names = [f.stem for f in json_files]
         selected_pres = st.selectbox(
             "Select a presentation to view",
-            [f.stem for f in json_files]
+            presentation_names
         )
         
         if selected_pres:
@@ -237,16 +251,21 @@ elif mode == "View Presentations":
                 with col1:
                     if st.button("📥 Export This Presentation to PowerPoint"):
                         prs = export_to_pptx(pres_data)
-                        output_path = DATA_DIR / f"{selected_pres}_export.pptx"
-                        prs.save(str(output_path))
-                        st.success(f"✅ Exported to {output_path}")
+                        if prs:
+                            output_path = DATA_DIR / f"{selected_pres}_export.pptx"
+                            prs.save(str(output_path))
+                            st.success(f"✅ Exported to {output_path}")
                 
                 with col2:
                     if st.button("🗑️ Delete Presentation"):
-                        json_file = DATA_DIR / f"{selected_pres}.json"
-                        json_file.unlink()
-                        st.success(f"Presentation '{selected_pres}' deleted")
-                        st.rerun()
+                        try:
+                            json_file = DATA_DIR / f"{selected_pres}.json"
+                            if json_file.exists():
+                                json_file.unlink()
+                                st.success(f"Presentation '{selected_pres}' deleted")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting presentation: {e}")
     else:
         st.info("📭 No presentations found. Create one in the 'Create Presentation' tab!")
 
@@ -257,9 +276,10 @@ elif mode == "Edit Presentation":
     json_files = list(DATA_DIR.glob("*.json"))
     
     if json_files:
+        presentation_names = [f.stem for f in json_files]
         selected_pres = st.selectbox(
             "Select a presentation to edit",
-            [f.stem for f in json_files],
+            presentation_names,
             key="edit_select"
         )
         
@@ -285,10 +305,13 @@ elif mode == "Edit Presentation":
                             )
                         
                         with col2:
+                            current_type = slides[i].get("type", "Content Slide")
+                            type_options = ["Title Slide", "Content Slide", "Quote Slide"]
+                            type_index = type_options.index(current_type) if current_type in type_options else 1
                             slides[i]["type"] = st.selectbox(
                                 f"Type for Slide {i+1}",
-                                ["Title Slide", "Content Slide", "Quote Slide"],
-                                index=["Title Slide", "Content Slide", "Quote Slide"].index(slides[i].get("type", "Content Slide")),
+                                type_options,
+                                index=type_index,
                                 key=f"edit_type_{i}"
                             )
                         
@@ -302,8 +325,9 @@ elif mode == "Edit Presentation":
                         st.markdown("---")
                 
                 if st.button("💾 Save Changes", use_container_width=True):
-                    save_presentation_data(selected_pres, slides)
-                    st.success(f"✅ Changes saved to '{selected_pres}'!")
+                    result = save_presentation_data(selected_pres, slides)
+                    if result:
+                        st.success(f"✅ Changes saved to '{selected_pres}'!")
     else:
         st.info("📭 No presentations found to edit.")
 
